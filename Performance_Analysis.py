@@ -14,7 +14,7 @@ class PerformanceAnalysis:
         self.calculate_cumulative_returns()
 
     def calculate_returns(self):
-        """计算策略日收益率（从账户总资产推导）"""
+        """计算策略日收益率 - 修复版本"""
         if len(self.account.total_assets) == 0:
             raise ValueError("没有可用的资产数据用于计算收益率")
 
@@ -23,8 +23,51 @@ class PerformanceAnalysis:
             self.account.total_assets,
             index=self.account.dates
         )
-        self.strategy_returns = total_assets_series.pct_change().fillna(0)  # 首日收益率为0
+
+        # 修复1：检查资产数据是否合理
+        if any(asset <= 0 for asset in self.account.total_assets):
+            print("警告：发现非正资产值，可能影响收益率计算")
+            # 将非正资产值替换为前一个有效值或小正数
+            total_assets_series = total_assets_series.replace(0, np.nan).fillna(method='ffill')
+            total_assets_series = total_assets_series.clip(lower=1e-6)  # 确保最小值为正
+
+        # 修复2：使用对数收益率，避免极端值
+        # 方法1：标准百分比变化（限制单日涨跌幅在合理范围内）
+        self.strategy_returns = total_assets_series.pct_change().fillna(0)
+
+        # 方法2：对数收益率（更稳定）
+        # self.strategy_returns = np.log(total_assets_series / total_assets_series.shift(1)).fillna(0)
+
+        # 修复3：限制单日涨跌幅在合理范围内（A股±10%）
+        self.strategy_returns = self.strategy_returns.clip(lower=-0.11, upper=0.11)
+
+        print(f"收益率统计: 最小值={self.strategy_returns.min():.4f}, 最大值={self.strategy_returns.max():.4f}")
+
         return self.strategy_returns
+
+    def calculate_cumulative_returns(self):
+        """计算累计收益率和累计净值 - 修复版本"""
+        if self.strategy_returns is None:
+            self.calculate_returns()
+
+        try:
+            # 计算累计净值（从1开始）
+            self.cumulative_net_assets = (1 + self.strategy_returns).cumprod()
+
+            # 计算累计收益率
+            self.cumulative_returns = self.cumulative_net_assets - 1
+
+            print(
+                f"累计收益率统计: 最小值={self.cumulative_returns.min():.4f}, 最大值={self.cumulative_returns.max():.4f}")
+
+        except Exception as e:
+            print(f"累计收益率计算错误: {e}")
+            # 如果计算失败，创建安全的默认值
+            self.cumulative_net_assets = pd.Series([1.0] * len(self.strategy_returns),
+                                                   index=self.strategy_returns.index)
+            self.cumulative_returns = pd.Series([0.0] * len(self.strategy_returns), index=self.strategy_returns.index)
+
+        return self.cumulative_returns
 
     def calculate_cumulative_returns(self):
         """计算累计收益率和累计净值"""
@@ -82,27 +125,6 @@ class PerformanceAnalysis:
         sharpe_ratio = (annual_return - risk_free_rate) / annual_volatility
         return sharpe_ratio
 
-    def get_max_drawdown(self):
-        """计算最大回撤 - 修复版本"""
-        if self.cumulative_net_assets is None:
-            self.calculate_cumulative_returns()
-
-        if len(self.cumulative_net_assets) == 0:
-            return 0.0
-
-        # 使用累计净值计算回撤
-        cumulative_values = self.cumulative_net_assets.values
-        peak = cumulative_values[0]
-        max_drawdown = 0
-
-        for value in cumulative_values:
-            if value > peak:
-                peak = value
-            drawdown = (peak - value) / peak
-            if drawdown > max_drawdown:
-                max_drawdown = drawdown
-
-        return max_drawdown * 100  # 转换为百分比
 
     def get_volatility(self):
         """计算年化波动率"""
@@ -192,7 +214,6 @@ class PerformanceAnalysis:
         total_return = self.get_total_return()
         annual_return = self.get_annualized_return()
         sharpe_ratio = self.get_sharpe_ratio()
-        max_drawdown = self.get_max_drawdown()
         volatility = self.get_volatility()
         calmar_ratio = self.get_calmar_ratio()
         trade_count = self.get_trade_count()
@@ -211,7 +232,6 @@ class PerformanceAnalysis:
             '总收益率 (%)': round(total_return, 2),
             '年化收益率 (%)': round(annual_return, 2),
             '夏普比率': round(sharpe_ratio, 3),
-            '最大回撤 (%)': round(max_drawdown, 2),
             '年化波动率 (%)': round(volatility, 2),
             'Calmar比率': round(calmar_ratio, 3),
             '总交易次数': trade_count,

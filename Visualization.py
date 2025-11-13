@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-
+from Performance_Analysis import PerformanceAnalysis
 
 
 class BacktestVisualization:
@@ -57,12 +57,25 @@ class BacktestVisualization:
         return benchmark_returns
 
     def plot_results(self):
-        """绘制回测结果"""
-        # 计算策略收益率
-        strategy_returns = self.calculate_returns()
+        """绘制回测结果 - 修复版本"""
+        # 创建绩效分析对象
+        performance = PerformanceAnalysis(self.account)
 
-        # 计算策略累计收益率
-        strategy_cumulative = (1 + strategy_returns).cumprod() - 1
+        # 使用PerformanceAnalysis类的方法获取收益率数据
+        strategy_returns = performance.strategy_returns
+
+        # 计算每日累计收益率
+        strategy_cumulative = performance.cumulative_returns
+
+        # 调试信息
+        print("=== 调试信息 ===")
+        print(f"总资产序列长度: {len(self.account.total_assets)}")
+        print(f"日期序列长度: {len(self.account.dates)}")
+        print(f"收益率序列长度: {len(strategy_returns)}")
+        print(f"累计收益率序列长度: {len(strategy_cumulative)}")
+        print(f"总资产范围: {min(self.account.total_assets):.2f} ~ {max(self.account.total_assets):.2f}")
+        print(f"收益率范围: {strategy_returns.min():.4f} ~ {strategy_returns.max():.4f}")
+        print(f"累计收益率范围: {strategy_cumulative.min():.4f} ~ {strategy_cumulative.max():.4f}")
 
         # 获取回测时间范围
         start_date = self.account.dates[0]
@@ -84,7 +97,9 @@ class BacktestVisualization:
                 benchmark_cumulative = (1 + benchmark_returns.loc[common_dates]).cumprod() - 1
                 plt.plot(common_dates, benchmark_cumulative, label='CSI 500 Index Cumulative Return', linewidth=2)
 
-        plt.title('Strategy vs CSI 500 Index Cumulative Returns')
+        # 在图表标题中显示总收益率
+        total_return = performance.get_total_return()
+        plt.title(f'Strategy vs CSI 500 Index Cumulative Returns\nTotal Return: {total_return:.2f}%')
         plt.xlabel('Date')
         plt.ylabel('Cumulative Return')
         plt.legend()
@@ -103,7 +118,6 @@ class BacktestVisualization:
         total_return = performance_analyzer.get_total_return()
         annualized_return = performance_analyzer.get_annualized_return()
         sharpe_ratio = performance_analyzer.get_sharpe_ratio()
-        max_drawdown = performance_analyzer.get_max_drawdown()
         trade_count = performance_analyzer.get_trade_count()
         buy_count, sell_count = performance_analyzer.get_buy_sell_count()
 
@@ -111,7 +125,6 @@ class BacktestVisualization:
         print(f"总收益率: {total_return:.2f}%")
         print(f"年化收益率: {annualized_return:.2f}%")
         print(f"夏普比率: {sharpe_ratio:.2f}")
-        print(f"最大回撤: {max_drawdown:.2f}%")
         print(f"交易次数: {trade_count}")
 
         # 打印交易统计

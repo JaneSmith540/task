@@ -15,6 +15,6 @@ backtest_engine = BacktestEngine(
 
 # 3. 运行回测（指定回测日期范围，需在数据文件的日期范围内）
 backtest_engine.run(
-    start_date=pd.to_datetime('2021-09-02'),
-    end_date=pd.to_datetime('2022-9-15')
+    start_date=pd.to_datetime('2018-09-02'),
+    end_date=pd.to_datetime('2025-3-15')
 )
